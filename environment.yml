@@ -1,0 +1,143 @@
+Description: >
+    This template deploys environment for keycloak-ecs-fargate.
+
+Parameters:
+    VpcCIDRPrefix:
+        Description: Prefix of the VPC CIDR like "10.180"
+        Type: String
+        Default: "10.180"
+
+Resources:
+    VPC:
+        Type: AWS::EC2::VPC
+        Properties:
+            CidrBlock: !Sub ${VpcCIDRPrefix}.0.0/16
+            Tags:
+                - Key: Name
+                  Value: !Ref AWS::StackName
+
+    InternetGateway:
+        Type: AWS::EC2::InternetGateway
+        Properties:
+            Tags:
+                - Key: Name
+                  Value: !Ref AWS::StackName
+
+    InternetGatewayAttachment:
+        Type: AWS::EC2::VPCGatewayAttachment
+        Properties:
+            InternetGatewayId: !Ref InternetGateway
+            VpcId: !Ref VPC
+
+    PublicSubnet1: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC
+            AvailabilityZone: !Sub ${AWS::Region}a
+            CidrBlock: !Sub ${VpcCIDRPrefix}.8.0/21
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${AWS::StackName} Public Subnet (AZ1)
+    PublicSubnet2: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC
+            AvailabilityZone: !Sub ${AWS::Region}c
+            CidrBlock: !Sub ${VpcCIDRPrefix}.16.0/21
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${AWS::StackName} Public Subnet (AZ2)
+
+    PublicRouteTable:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${AWS::StackName} Public Routes
+    DefaultPublicRoute: 
+        Type: AWS::EC2::Route
+        Properties: 
+            RouteTableId: !Ref PublicRouteTable
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
+
+    PublicSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRouteTable
+            SubnetId: !Ref PublicSubnet1
+
+    PublicSubnet2RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PublicRouteTable
+            SubnetId: !Ref PublicSubnet2
+
+    ALBSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            VpcId: !Ref VPC
+            GroupDescription: ALB SecurityGroup
+            SecurityGroupIngress:
+                - CidrIp: 0.0.0.0/0
+                  IpProtocol: tcp
+                  FromPort: 80
+                  ToPort: 80
+            Tags:
+                - Key: Name
+                  Value: !Sub ${AWS::StackName}-ALB
+
+
+    ContainerSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            VpcId: !Ref VPC
+            GroupDescription: Container SecurityGroup
+            SecurityGroupIngress:
+                - SourceSecurityGroupId: !Ref ALBSecurityGroup
+                  IpProtocol: -1
+            Tags:
+                - Key: Name
+                  Value: !Sub ${AWS::StackName}-ContainerSecurityGroup
+
+    ECSCluster:
+        Type: AWS::ECS::Cluster
+        Properties:
+            ClusterName: !Sub ${AWS::StackName}-cluster
+
+    LoadBalancer:
+        Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+        Properties:
+            Name: !Sub ${AWS::StackName}-PublicALB
+            Subnets:
+                - !Ref PublicSubnet1
+                - !Ref PublicSubnet2
+            SecurityGroups:
+                - !Ref ALBSecurityGroup
+            Scheme: internet-facing
+            Tags:
+                - Key: Name
+                  Value: !Ref AWS::StackName
+
+    LoadBalancerListener:
+        Type: AWS::ElasticLoadBalancingV2::Listener
+        Properties:
+            LoadBalancerArn: !Ref LoadBalancer
+            Port: 80
+            Protocol: HTTP
+            DefaultActions:
+                - Type: forward
+                  TargetGroupArn: !Ref DefaultTargetGroup
+
+    DefaultTargetGroup:
+        Type: AWS::ElasticLoadBalancingV2::TargetGroup
+        Properties:
+            Name: !Sub ${AWS::StackName}-TargetGroup
+            VpcId: !Ref VPC
+            Port: 80
+            Protocol: HTTP
+            TargetType: ip
+
