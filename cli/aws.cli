@@ -1,3 +1,4 @@
 embed-server --server-config=standalone-ha.xml --std-out=echo
 run-batch --file=cli/jgroups.cli
+run-batch --file=cli/load-balancer.cli
 stop-embedded-server

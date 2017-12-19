@@ -1,0 +1,2 @@
+/subsystem=undertow/server=default-server/http-listener=default:write-attribute(name=redirect-socket,value=proxy-https)
+/socket-binding-group=standard-sockets/socket-binding=proxy-https/:add(port=443)

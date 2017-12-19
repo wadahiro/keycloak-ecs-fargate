@@ -22,6 +22,7 @@
 /subsystem=jgroups/stack=tcp/protocol=pbcast.GMS:add
 /subsystem=jgroups/stack=tcp/protocol=MFC:add
 /subsystem=jgroups/stack=tcp/protocol=FRAG2:add
+/socket-binding-group=standard-sockets/socket-binding=jgroups-tcp/:write-attribute(name=interface,value=public)
 # Debug logging
 /subsystem=logging/logger=org.jgroups:add
 /subsystem=logging/logger=org.jgroups:write-attribute(name=level,value=DEBUG)
