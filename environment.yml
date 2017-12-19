@@ -7,14 +7,39 @@ Parameters:
         Type: String
         Default: "10.180"
 
+    BastionHostKeyPair:
+        Description: Select the key pair to use to launch the bastion host
+        Type: AWS::EC2::KeyPair::KeyName
+
+Mappings:
+    AWSRegionToAMI:
+        us-east-1:
+            BastionHost: ami-55ef662f
+
 Resources:
     VPC:
         Type: AWS::EC2::VPC
         Properties:
             CidrBlock: !Sub ${VpcCIDRPrefix}.0.0/16
+            EnableDnsSupport: true
+            EnableDnsHostnames: true
             Tags:
                 - Key: Name
                   Value: !Ref AWS::StackName
+    PrivateDNS: 
+        Type: AWS::Route53::HostedZone
+        Properties: 
+            HostedZoneConfig: 
+                Comment: Private hosted zone for keycloak.local
+            Name: keycloak.local
+            VPCs: 
+                - VPCId: !Ref VPC
+                  VPCRegion: !Ref AWS::Region
+
+    ECR:
+        Type: AWS::ECR::Repository
+        Properties:
+            RepositoryName: keycloak-ha-mysql
 
     InternetGateway:
         Type: AWS::EC2::InternetGateway
@@ -50,6 +75,28 @@ Resources:
                 - Key: Name 
                   Value: !Sub ${AWS::StackName} Public Subnet (AZ2)
 
+    PrivateSubnet1: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC
+            AvailabilityZone: !Sub ${AWS::Region}a
+            CidrBlock: !Sub ${VpcCIDRPrefix}.24.0/21
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${AWS::StackName} Private Subnet (AZ1)
+
+    PrivateSubnet2: 
+        Type: AWS::EC2::Subnet
+        Properties:
+            VpcId: !Ref VPC
+            AvailabilityZone: !Sub ${AWS::Region}c
+            CidrBlock: !Sub ${VpcCIDRPrefix}.32.0/21
+            MapPublicIpOnLaunch: true
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${AWS::StackName} Private Subnet (AZ2)
+
     PublicRouteTable:
         Type: AWS::EC2::RouteTable
         Properties: 
@@ -57,12 +104,6 @@ Resources:
             Tags: 
                 - Key: Name 
                   Value: !Sub ${AWS::StackName} Public Routes
-    DefaultPublicRoute: 
-        Type: AWS::EC2::Route
-        Properties: 
-            RouteTableId: !Ref PublicRouteTable
-            DestinationCidrBlock: 0.0.0.0/0
-            GatewayId: !Ref InternetGateway
 
     PublicSubnet1RouteTableAssociation:
         Type: AWS::EC2::SubnetRouteTableAssociation
@@ -75,6 +116,55 @@ Resources:
         Properties:
             RouteTableId: !Ref PublicRouteTable
             SubnetId: !Ref PublicSubnet2
+
+    PrivateRouteTable1:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${AWS::StackName} Private Routes (AZ1)
+
+    PrivateSubnet1RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            SubnetId: !Ref PrivateSubnet1
+
+    PrivateRouteTable2:
+        Type: AWS::EC2::RouteTable
+        Properties: 
+            VpcId: !Ref VPC
+            Tags: 
+                - Key: Name 
+                  Value: !Sub ${AWS::StackName} Private Routes (AZ2)
+
+    PrivateSubnet2RouteTableAssociation:
+        Type: AWS::EC2::SubnetRouteTableAssociation
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            SubnetId: !Ref PrivateSubnet2
+
+    DefaultPublicRoute: 
+        Type: AWS::EC2::Route
+        Properties: 
+            RouteTableId: !Ref PublicRouteTable
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
+
+    DefaultPrivateRoute1:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
+
+    DefaultPrivateRoute2:
+        Type: AWS::EC2::Route
+        Properties:
+            RouteTableId: !Ref PrivateRouteTable2
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId: !Ref InternetGateway
 
     ALBSecurityGroup:
         Type: AWS::EC2::SecurityGroup
@@ -98,10 +188,44 @@ Resources:
             GroupDescription: Container SecurityGroup
             SecurityGroupIngress:
                 - SourceSecurityGroupId: !Ref ALBSecurityGroup
-                  IpProtocol: -1
+                  IpProtocol: tcp
+                  FromPort: 8080
+                  ToPort: 8080
             Tags:
                 - Key: Name
                   Value: !Sub ${AWS::StackName}-ContainerSecurityGroup
+
+    DBSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            VpcId: !Ref VPC
+            GroupDescription: DB SecurityGroup
+            SecurityGroupIngress:
+                - SourceSecurityGroupId: !Ref ContainerSecurityGroup
+                  IpProtocol: tcp
+                  FromPort: 3306
+                  ToPort: 3306
+                - SourceSecurityGroupId: !Ref BastionHostSecurityGroup
+                  IpProtocol: tcp
+                  FromPort: 3306
+                  ToPort: 3306
+            Tags:
+                - Key: Name
+                  Value: !Sub ${AWS::StackName}-DBSecurityGroup
+
+    BastionHostSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            VpcId: !Ref VPC
+            GroupDescription: BastionHost SecurityGroup
+            SecurityGroupIngress:
+                - CidrIp: 0.0.0.0/0
+                  IpProtocol: tcp
+                  FromPort: 22
+                  ToPort: 22
+            Tags:
+                - Key: Name
+                  Value: !Sub ${AWS::StackName}-BastionHostSecurityGroup
 
     ECSCluster:
         Type: AWS::ECS::Cluster
@@ -140,4 +264,193 @@ Resources:
             Port: 80
             Protocol: HTTP
             TargetType: ip
+            Matcher: 
+                HttpCode: 200
+            HealthCheckIntervalSeconds: 10
+            HealthCheckPath: /auth/version
+            HealthCheckProtocol: HTTP
+            HealthCheckTimeoutSeconds: 5
+            HealthyThresholdCount: 2
+            UnhealthyThresholdCount: 2 
+            TargetGroupAttributes:
+                - Key: deregistration_delay.timeout_seconds
+                  Value: 10
+
+    DBInstance:
+        Type: AWS::RDS::DBInstance
+        Properties:
+            Engine: MySQL
+            EngineVersion: 5.7.16
+            AllocatedStorage: 5
+            DBInstanceClass: db.t2.micro
+            DBInstanceIdentifier: !Sub ${AWS::StackName}-RDS-MySQL
+            DBParameterGroupName: !Ref DBParameterGroup
+            VPCSecurityGroups:
+                - !Ref DBSecurityGroup
+            DBSubnetGroupName: !Ref DBSubnetGroup
+            MasterUsername: root
+            MasterUserPassword: rootpass
+            MultiAZ: false
+            PubliclyAccessible: false
+            StorageType: gp2
+
+    DBSubnetGroup:
+        Type: AWS::RDS::DBSubnetGroup
+        Properties:
+            DBSubnetGroupDescription: !Sub ${AWS::StackName}-RDS-MySQL Subnet group
+            SubnetIds:
+                - !Ref PrivateSubnet1
+                - !Ref PrivateSubnet2
+
+    DBParameterGroup:
+        Type: AWS::RDS::DBParameterGroup
+        Properties:
+            Description: Parameter Group for MySQL
+            Family: MySQL5.7
+            Parameters:
+                character_set_server: utf8
+                default_password_lifetime: 0
+
+    DBPrivateDNSRecord:
+        Type: AWS::Route53::RecordSetGroup
+        Properties:
+            HostedZoneId: !Ref PrivateDNS
+            RecordSets:
+                - Name: db.keycloak.local
+                  Type: CNAME
+                  TTL: 60
+                  ResourceRecords:
+                      - !GetAtt DBInstance.Endpoint.Address
+
+    BastionHostInstance:
+        Type: AWS::EC2::Instance
+        Properties:
+            ImageId: !FindInMap [AWSRegionToAMI, !Ref "AWS::Region", BastionHost]
+            InstanceType: t2.nano
+            KeyName: !Ref BastionHostKeyPair
+            NetworkInterfaces:
+                - AssociatePublicIpAddress: true
+                  DeleteOnTermination: true
+                  DeviceIndex: 0
+                  SubnetId: !Ref PublicSubnet1
+                  GroupSet:
+                      - !Ref BastionHostSecurityGroup
+            Tags:
+                - Key: Name
+                  Value: !Sub ${AWS::StackName}-BastionHost 
+            UserData:
+                Fn::Base64:
+                    !Sub |
+                        #!/bin/bash -x
+                        yum -y update --security
+                        # Install mysql client
+                        yum -y install mysql
+
+                        /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource BastionHostInstance --region ${AWS::Region}
+
+    KeycloakLogGroup:
+        Type: AWS::Logs::LogGroup
+        Properties:
+            LogGroupName: !Sub ${AWS::StackName}/keycloak
+            RetentionInDays: 7
+
+    ECSTaskExecutionRole:
+        Type: AWS::IAM::Role
+        Properties:
+            RoleName: !Sub ${AWS::StackName}-ECSTaskExecutionRole
+            AssumeRolePolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    - Effect: Allow
+                      Action:
+                          - sts:AssumeRole
+                      Principal:
+                          Service:
+                              - ecs-tasks.amazonaws.com
+            Policies:
+                - PolicyName: !Sub ${AWS::StackName}-policy
+                  PolicyDocument:
+                      Version: 2012-10-17
+                      Statement:
+                          - Effect: Allow
+                            Resource: "*"
+                            Action:
+                                - ecr:GetAuthorizationToken
+                                - ecr:BatchCheckLayerAvailability
+                                - ecr:GetDownloadUrlForLayer
+                                - ecr:BatchGetImage
+                                - logs:CreateLogStream
+                                - logs:PutLogEvents
+
+    KeycloakTask:
+        Type: AWS::ECS::TaskDefinition
+        Properties:
+            ExecutionRoleArn: !Ref ECSTaskExecutionRole
+            Family: !Sub ${AWS::StackName}-task
+            Cpu: 256
+            Memory: 1024
+            NetworkMode: awsvpc
+            RequiresCompatibilities:
+                - FARGATE
+            ContainerDefinitions:
+                - Name: keycloak
+                  Essential: true
+                  Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/keycloak-ha-mysql:latest
+                  MemoryReservation: 1024
+                  PortMappings:
+                      - ContainerPort: 8080
+                        HostPort: 8080
+                        Protocol: tcp
+                      - ContainerPort: 7600
+                        HostPort: 7600
+                        Protocol: tcp
+                      - ContainerPort: 57600
+                        HostPort: 57600
+                        Protocol: tcp
+                  Environment:
+                      - Name: KEYCLOAK_USER
+                        Value: admin
+                      - Name: KEYCLOAK_PASSWORD
+                        Value: admin
+                      - Name: MYSQL_PORT_3306_TCP_ADDR
+                        Value: db.keycloak.local
+                      - Name: MYSQL_PORT_3306_TCP_PORT
+                        Value: 3306
+                      - Name: MYSQL_DATABASE
+                        Value: keycloak
+                      - Name: MYSQL_USER
+                        Value: keycloak
+                      - Name: MYSQL_PASSWORD
+                        Value: keycloak
+                      - Name: KEYCLOAK_LOGLEVEL
+                        Value: DEBUG
+                      - Name: PROXY_ADDRESS_FORWARDING
+                        Value: true
+                  LogConfiguration:
+                      LogDriver: awslogs
+                      Options:
+                          awslogs-group: !Ref KeycloakLogGroup
+                          awslogs-region: !Ref AWS::Region
+                          awslogs-stream-prefix: keycloak
+
+    KeycloakService:
+        Type: AWS::ECS::Service
+        Properties:
+            ServiceName: !Sub ${AWS::StackName}-service
+            Cluster: !Sub ${AWS::StackName}-cluster
+            TaskDefinition: !Ref KeycloakTask
+            DesiredCount: 1
+            LaunchType: FARGATE
+            LoadBalancers:
+                - TargetGroupArn: !Ref DefaultTargetGroup
+                  ContainerPort: 8080
+                  ContainerName: keycloak
+            NetworkConfiguration:
+                AwsvpcConfiguration:
+                    AssignPublicIp: ENABLED
+                    SecurityGroups:
+                        - !Ref ContainerSecurityGroup
+                    Subnets:
+                        - !Ref PrivateSubnet1
+                        - !Ref PrivateSubnet2
 
