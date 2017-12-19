@@ -404,9 +404,6 @@ Resources:
                       - ContainerPort: 7600
                         HostPort: 7600
                         Protocol: tcp
-                      - ContainerPort: 57600
-                        HostPort: 57600
-                        Protocol: tcp
                   Environment:
                       - Name: KEYCLOAK_USER
                         Value: admin
