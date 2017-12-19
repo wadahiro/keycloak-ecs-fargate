@@ -11,7 +11,7 @@
 /subsystem=jgroups/stack=tcp/protocol=pbcast.GMS:remove
 /subsystem=jgroups/stack=tcp/protocol=MFC:remove
 /subsystem=jgroups/stack=tcp/protocol=FRAG2:remove
-/subsystem=jgroups/stack=tcp/protocol=JDBC_PING/:add(properties={connection_driver => "com.mysql.jdbc.Driver", connection_url => "jdbc:mysql://${env.MYSQL_PORT_3306_TCP_ADDR}:${env.MYSQL_PORT_3306_TCP_PORT}/${env.MYSQL_DATABASE:keycloak}?characterEncoding=utf8&useSSL=false", connection_username => "${env.MYSQL_USER:keycloak}", connection_password => "${env.MYSQL_PASSWORD:password}", initialize_sql => "CREATE TABLE IF NOT EXISTS JGROUPSPING (own_addr VARCHAR(200) NOT NULL, cluster_name VARCHAR(200) NOT NULL, ping_data BLOB DEFAULT NULL, PRIMARY KEY (own_addr, cluster_name)"})
+/subsystem=jgroups/stack=tcp/protocol=JDBC_PING/:add(properties={connection_driver => "com.mysql.jdbc.Driver", connection_url => "jdbc:mysql://${env.MYSQL_PORT_3306_TCP_ADDR}:${env.MYSQL_PORT_3306_TCP_PORT}/${env.MYSQL_DATABASE:keycloak}?characterEncoding=utf8&useSSL=false", connection_username => "${env.MYSQL_USER:keycloak}", connection_password => "${env.MYSQL_PASSWORD:password}", initialize_sql => "CREATE TABLE IF NOT EXISTS JGROUPSPING (own_addr VARCHAR(200) NOT NULL, cluster_name VARCHAR(200) NOT NULL, ping_data BLOB DEFAULT NULL, PRIMARY KEY (own_addr, cluster_name))"})
 /subsystem=jgroups/stack=tcp/protocol=MERGE3:add
 /subsystem=jgroups/stack=tcp/protocol=FD_SOCK:add
 /subsystem=jgroups/stack=tcp/protocol=FD_ALL:add
@@ -22,3 +22,7 @@
 /subsystem=jgroups/stack=tcp/protocol=pbcast.GMS:add
 /subsystem=jgroups/stack=tcp/protocol=MFC:add
 /subsystem=jgroups/stack=tcp/protocol=FRAG2:add
+# Debug logging
+/subsystem=logging/logger=org.jgroups:add
+/subsystem=logging/logger=org.jgroups:write-attribute(name=level,value=DEBUG)
+/subsystem=logging/console-handler=CONSOLE/:write-attribute(name=level,value=DEBUG)
