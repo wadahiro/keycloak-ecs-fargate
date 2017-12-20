@@ -12,5 +12,5 @@ fi
 
 echo "Use $EXTERNAL_ADDR for clustering."
 
-sh /opt/jboss/docker-entrypoint.sh $@
+sh /opt/jboss/docker-entrypoint.sh $@ -Djgroups.bind_addr=$EXTERNAL_ADDR
 
