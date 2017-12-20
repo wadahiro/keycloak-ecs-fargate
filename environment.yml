@@ -199,6 +199,15 @@ Resources:
                 - Key: Name
                   Value: !Sub ${AWS::StackName}-ContainerSecurityGroup
 
+    ContainerSecurityGroupIngress:
+        Type: AWS::EC2::SecurityGroupIngress
+        Properties:
+            GroupId: !Ref ContainerSecurityGroup
+            SourceSecurityGroupId: !Ref ContainerSecurityGroup
+            IpProtocol: tcp
+            FromPort: 9700
+            ToPort: 9700
+
     DBSecurityGroup:
         Type: AWS::EC2::SecurityGroup
         Properties:
@@ -265,7 +274,7 @@ Resources:
     DefaultTargetGroup:
         Type: AWS::ElasticLoadBalancingV2::TargetGroup
         Properties:
-            Name: !Sub ${AWS::StackName}-TargetGroup2
+            Name: !Sub ${AWS::StackName}-TargetGroup
             VpcId: !Ref VPC
             Port: 443
             Protocol: HTTP
@@ -281,6 +290,12 @@ Resources:
             TargetGroupAttributes:
                 - Key: deregistration_delay.timeout_seconds
                   Value: 10
+                - Key: stickiness.enabled
+                  Value: true
+                - Key: stickiness.type
+                  Value: lb_cookie
+                - Key: stickiness.lb_cookie.duration_seconds
+                  Value: 86400
 
     DBInstance:
         Type: AWS::RDS::DBInstance
@@ -393,8 +408,8 @@ Resources:
         Properties:
             ExecutionRoleArn: !Ref ECSTaskExecutionRole
             Family: !Sub ${AWS::StackName}-task
-            Cpu: 256
-            Memory: 1024
+            Cpu: 1024
+            Memory: 2048
             NetworkMode: awsvpc
             RequiresCompatibilities:
                 - FARGATE
@@ -402,7 +417,7 @@ Resources:
                 - Name: keycloak
                   Essential: true
                   Image: !Sub ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/keycloak-ha-mysql:latest
-                  MemoryReservation: 1024
+                  MemoryReservation: 2048
                   PortMappings:
                       - ContainerPort: 8080
                         HostPort: 8080
@@ -439,8 +454,8 @@ Resources:
     KeycloakService:
         Type: AWS::ECS::Service
         Properties:
-            ServiceName: !Sub ${AWS::StackName}-service2
-            Cluster: !Sub ${AWS::StackName}-cluster2
+            ServiceName: !Sub ${AWS::StackName}-service
+            Cluster: !Sub ${AWS::StackName}-cluster
             TaskDefinition: !Ref KeycloakTask
             DesiredCount: 1
             LaunchType: FARGATE
