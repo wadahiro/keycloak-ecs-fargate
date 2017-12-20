@@ -40,10 +40,11 @@ Resources:
                 - VPCId: !Ref VPC
                   VPCRegion: !Ref AWS::Region
 
-    ECR:
-        Type: AWS::ECR::Repository
-        Properties:
-            RepositoryName: keycloak-ha-mysql
+    # Create ECR repository manually because it can't be deleted by deleting this cloudformation stack
+    #ECR:
+    #    Type: AWS::ECR::Repository
+    #    Properties:
+    #        RepositoryName: keycloak-ha-mysql
 
     InternetGateway:
         Type: AWS::EC2::InternetGateway
@@ -455,7 +456,7 @@ Resources:
         Type: AWS::ECS::Service
         Properties:
             ServiceName: !Sub ${AWS::StackName}-service
-            Cluster: !Sub ${AWS::StackName}-cluster
+            Cluster: !Ref ECSCluster
             TaskDefinition: !Ref KeycloakTask
             DesiredCount: 1
             LaunchType: FARGATE
