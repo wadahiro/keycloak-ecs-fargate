@@ -459,7 +459,7 @@ Resources:
             ServiceName: !Sub ${AWS::StackName}-service
             Cluster: !Ref ECSCluster
             TaskDefinition: !Ref KeycloakTask
-            DesiredCount: 1
+            DesiredCount: 2
             LaunchType: FARGATE
             LoadBalancers:
                 - TargetGroupArn: !Ref DefaultTargetGroup
@@ -473,4 +473,13 @@ Resources:
                     Subnets:
                         - !Ref PrivateSubnet1
                         - !Ref PrivateSubnet2
+
+Outputs:
+    BastionHostPublicIp:
+        Description: Public ip address of bastion host
+        Value: !GetAtt BastionHostInstance.PublicIp
+
+    LoadBalancerDNSName:
+        Description: DNS name of public load balancer
+        Value: !GetAtt LoadBalancer.DNSName
 
