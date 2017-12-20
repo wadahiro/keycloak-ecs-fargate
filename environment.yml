@@ -206,8 +206,8 @@ Resources:
             GroupId: !Ref ContainerSecurityGroup
             SourceSecurityGroupId: !Ref ContainerSecurityGroup
             IpProtocol: tcp
-            FromPort: 9700
-            ToPort: 9700
+            FromPort: 7600
+            ToPort: 7600
 
     DBSecurityGroup:
         Type: AWS::EC2::SecurityGroup
@@ -244,7 +244,7 @@ Resources:
     ECSCluster:
         Type: AWS::ECS::Cluster
         Properties:
-            ClusterName: !Sub ${AWS::StackName}-cluster2
+            ClusterName: !Sub ${AWS::StackName}-cluster
 
     LoadBalancer:
         Type: AWS::ElasticLoadBalancingV2::LoadBalancer
