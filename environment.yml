@@ -453,6 +453,7 @@ Resources:
                           awslogs-stream-prefix: keycloak
 
     KeycloakService:
+        DependsOn: LoadBalancerListener
         Type: AWS::ECS::Service
         Properties:
             ServiceName: !Sub ${AWS::StackName}-service
