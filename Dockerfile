@@ -17,5 +17,4 @@ ENTRYPOINT [ "/opt/jboss/docker-entrypoint-aws.sh" ]
 CMD ["-b", "0.0.0.0", "--server-config", "standalone-ha.xml"]
 
 EXPOSE 7600
-EXPOSE 57600
 
