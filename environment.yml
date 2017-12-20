@@ -11,6 +11,10 @@ Parameters:
         Description: Select the key pair to use to launch the bastion host
         Type: AWS::EC2::KeyPair::KeyName
 
+    CertificateIdentifier:
+        Description: Certificate identifier for ELB
+        Type: String
+
 Mappings:
     AWSRegionToAMI:
         us-east-1:
@@ -174,8 +178,8 @@ Resources:
             SecurityGroupIngress:
                 - CidrIp: 0.0.0.0/0
                   IpProtocol: tcp
-                  FromPort: 80
-                  ToPort: 80
+                  FromPort: 443
+                  ToPort: 443
             Tags:
                 - Key: Name
                   Value: !Sub ${AWS::StackName}-ALB
@@ -230,7 +234,7 @@ Resources:
     ECSCluster:
         Type: AWS::ECS::Cluster
         Properties:
-            ClusterName: !Sub ${AWS::StackName}-cluster
+            ClusterName: !Sub ${AWS::StackName}-cluster2
 
     LoadBalancer:
         Type: AWS::ElasticLoadBalancingV2::LoadBalancer
@@ -250,28 +254,30 @@ Resources:
         Type: AWS::ElasticLoadBalancingV2::Listener
         Properties:
             LoadBalancerArn: !Ref LoadBalancer
-            Port: 80
-            Protocol: HTTP
+            Port: 443
+            Protocol: HTTPS
             DefaultActions:
                 - Type: forward
                   TargetGroupArn: !Ref DefaultTargetGroup
+            Certificates:
+                - CertificateArn: !Sub arn:aws:acm:${AWS::Region}:${AWS::AccountId}:certificate/${CertificateIdentifier}
 
     DefaultTargetGroup:
         Type: AWS::ElasticLoadBalancingV2::TargetGroup
         Properties:
-            Name: !Sub ${AWS::StackName}-TargetGroup
+            Name: !Sub ${AWS::StackName}-TargetGroup2
             VpcId: !Ref VPC
-            Port: 80
+            Port: 443
             Protocol: HTTP
             TargetType: ip
             Matcher: 
                 HttpCode: 200
-            HealthCheckIntervalSeconds: 10
+            HealthCheckIntervalSeconds: 30
             HealthCheckPath: /auth/version
             HealthCheckProtocol: HTTP
             HealthCheckTimeoutSeconds: 5
             HealthyThresholdCount: 2
-            UnhealthyThresholdCount: 2 
+            UnhealthyThresholdCount: 10 
             TargetGroupAttributes:
                 - Key: deregistration_delay.timeout_seconds
                   Value: 10
@@ -433,8 +439,8 @@ Resources:
     KeycloakService:
         Type: AWS::ECS::Service
         Properties:
-            ServiceName: !Sub ${AWS::StackName}-service
-            Cluster: !Sub ${AWS::StackName}-cluster
+            ServiceName: !Sub ${AWS::StackName}-service2
+            Cluster: !Sub ${AWS::StackName}-cluster2
             TaskDefinition: !Ref KeycloakTask
             DesiredCount: 1
             LaunchType: FARGATE
